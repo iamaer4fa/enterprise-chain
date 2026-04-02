@@ -1,0 +1,22 @@
+# Blockchain / database storage
+chaindata/
+chaindata2/
+
+# General DB files (optional but recommended)
+*.vlog
+*.mem
+*.sst
+*.ldb
+*.log
+
+# Temp / runtime files
+tmp/
+*.tmp
+
+# Build outputs
+bin/
+dist/
+
+# OS junk
+.DS_Store
+Thumbs.db

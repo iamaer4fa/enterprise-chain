@@ -1,0 +1,15 @@
+private key
+This is an testing private key to generate and test errors:
+2e157c8e6e662952d9bd0b806a6dd214059eed705605f0473ff16db46cad7f55
+
+Genesis key:
+New Private Key: 5b15dd1a16210644a7d3d07c96c3d3f160f2c929b2acba158894bb7b6ac43553
+Wallet Address:  8bce22ec065205b4640de643b28496e5a613e099
+Store these securely.
+
+Another private key:
+New Private Key: 924aa159dac5680123f4fce6cc2037f365dda8c97966201bcb57914f2edd4392
+Wallet Address:  cff145afa61f6fbc1d172d98f5a589c2ff76cac4
+Store these securely.
+
+
