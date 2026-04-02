@@ -11,14 +11,12 @@ import (
 	"github.com/iamaer4a/enterprise-chain/core/types"
 )
 
-// Server exposes the blockchain data via HTTP.
 type Server struct {
 	listenAddr string
 	bc         *core.Blockchain
 	pool       *mempool.Mempool
 }
 
-// NewServer initializes the API server.
 func NewServer(addr string, bc *core.Blockchain, pool *mempool.Mempool) *Server {
 	return &Server{
 		listenAddr: addr,
@@ -27,9 +25,16 @@ func NewServer(addr string, bc *core.Blockchain, pool *mempool.Mempool) *Server 
 	}
 }
 
-// Start boots up the HTTP server.
+// --- NEW: Universal CORS Helper ---
+func enableCORS(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
 func (s *Server) Start() error {
-	http.HandleFunc("/balance", s.handleGetBalance)
+	// Ensure the routes are mapped to the new endpoints
+	http.HandleFunc("/account", s.handleGetAccount)
 	http.HandleFunc("/tx", s.handleSubmitTx)
 	http.HandleFunc("/status", s.handleStatus)
 
@@ -37,13 +42,10 @@ func (s *Server) Start() error {
 	return http.ListenAndServe(s.listenAddr, nil)
 }
 
-// NEW: handleStatus returns the current chain height and mempool count
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
-	// Allow cross-origin requests from our HTML file
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	enableCORS(w)
+	// Handle browser preflight checks
+	if r.Method == "OPTIONS" {
 		return
 	}
 
@@ -56,10 +58,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleGetBalance returns the current balance of an address.
-func (s *Server) handleGetBalance(w http.ResponseWriter, r *http.Request) {
-	// Allow cross-origin requests from our HTML file
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+func (s *Server) handleGetAccount(w http.ResponseWriter, r *http.Request) {
+	enableCORS(w)
+	if r.Method == "OPTIONS" {
+		return
+	}
 
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -74,28 +77,34 @@ func (s *Server) handleGetBalance(w http.ResponseWriter, r *http.Request) {
 
 	address := types.HexToAddress(addrHex)
 
-	// Call the actual database via the Blockchain helper method
-	balance, err := s.bc.GetBalance(address)
+	// Fetch the FULL account from the database
+	acc, err := s.bc.StateDB().GetAccount(address)
 	if err != nil {
-		http.Error(w, "Failed to read balance", http.StatusInternalServerError)
+		http.Error(w, "Account not found", http.StatusNotFound)
 		return
 	}
 
-	response := map[string]string{
+	// Convert the byte storage to readable strings
+	readableStorage := make(map[string]string)
+	for k, v := range acc.Storage {
+		readableStorage[k] = string(v)
+	}
+
+	response := map[string]interface{}{
 		"address": addrHex,
-		"balance": balance.String(),
+		"balance": acc.Balance.String(),
+		"nonce":   acc.Nonce,
+		"storage": readableStorage,
+		"history": acc.TxHistory,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// handleSubmitTx accepts a signed transaction and adds it to the mempool.
-// Example: POST /tx with JSON body
 func (s *Server) handleSubmitTx(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	enableCORS(w)
+	if r.Method == "OPTIONS" {
 		return
 	}
 
@@ -110,8 +119,6 @@ func (s *Server) handleSubmitTx(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Verify the ECDSA signature here using core/crypto
-	// 2. Add to mempool
 	if err := s.pool.Add(tx); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -119,5 +126,4 @@ func (s *Server) handleSubmitTx(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusAccepted)
 	fmt.Fprintf(w, "Transaction %x accepted into mempool", tx.Hash[:4])
-
 }

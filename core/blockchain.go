@@ -59,12 +59,37 @@ func (bc *Blockchain) ProcessBlock(block types.Block) error {
 	// bc.tipHash = block.Header.Hash() // Assuming a Hash() method exists on Header
 
 	for _, tx := range block.Transactions {
-		// ... signature validation ...
-		// ... deduct sender balance ...
-		// ... update sender nonce ...
+		// ... (keep your existing signature validation here) ...
 
-		// --- CHECK YOUR FILE FOR THIS BLOCK ---
-		// If the transaction contains data, process it as a Smart Contract
+		txHashHex := fmt.Sprintf("%x", tx.Hash[:8])
+
+		// --- 1. SENDER LOGIC ---
+		senderAcc, _ := bc.stateDB.GetAccount(tx.Sender)
+		// (Assume balance check logic is here or happened in mempool)
+		senderAcc.Balance.Sub(senderAcc.Balance, tx.Amount)
+		senderAcc.Nonce++
+
+		if senderAcc.TxHistory == nil {
+			senderAcc.TxHistory = make([]string, 0)
+		}
+		senderAcc.TxHistory = append(senderAcc.TxHistory, "OUT: "+txHashHex)
+		bc.stateDB.SaveAccount(senderAcc)
+
+		// --- 2. RECIPIENT LOGIC ---
+		// Fetch recipient ONCE for both balances and contracts
+		recipientAcc, _ := bc.stateDB.GetAccount(tx.Recipient)
+
+		if recipientAcc.Balance == nil {
+			recipientAcc.Balance = big.NewInt(0)
+		}
+		recipientAcc.Balance.Add(recipientAcc.Balance, tx.Amount)
+
+		if recipientAcc.TxHistory == nil {
+			recipientAcc.TxHistory = make([]string, 0)
+		}
+		recipientAcc.TxHistory = append(recipientAcc.TxHistory, "IN:  "+txHashHex)
+
+		// --- 3. SMART CONTRACT EXECUTOR ---
 		if len(tx.Data) > 0 {
 			type ContractCall struct {
 				Method string `json:"method"`
@@ -75,19 +100,19 @@ func (bc *Blockchain) ProcessBlock(block types.Block) error {
 			var call ContractCall
 			if err := json.Unmarshal(tx.Data, &call); err == nil {
 				if call.Method == "SetRecord" {
-					contractAcc, _ := bc.stateDB.GetAccount(tx.Recipient)
-					if contractAcc.Storage == nil {
-						contractAcc.Storage = make(map[string][]byte)
+					if recipientAcc.Storage == nil {
+						recipientAcc.Storage = make(map[string][]byte)
 					}
 
-					contractAcc.Storage[call.Key] = []byte(call.Value)
-					bc.stateDB.SaveAccount(contractAcc)
-
+					// Store the data
+					recipientAcc.Storage[call.Key] = []byte(call.Value)
 					log.Printf("Contract Executed: Stored [%s] = [%s] at address %x\n", call.Key, call.Value, tx.Recipient[:4])
 				}
 			}
 		}
-		// --------------------------------------
+
+		// 4. SAVE RECIPIENT (Saves both balance and storage together!)
+		bc.stateDB.SaveAccount(recipientAcc)
 	}
 
 	log.Printf("Block %d processed and appended successfully by validator %x\n", block.Header.Number, block.Header.Signer[:4])

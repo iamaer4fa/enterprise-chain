@@ -8,10 +8,11 @@ import (
 
 // Account represents a single participant's state in the network.
 type Account struct {
-	Address types.Address
-	Nonce   uint64
-	Balance *big.Int
-	Storage map[string][]byte // For smart contract state
+	Address   types.Address     `json:"address"`
+	Nonce     uint64            `json:"nonce"`
+	Balance   *big.Int          `json:"balance"`
+	Storage   map[string][]byte `json:"storage"` // For smart contract state
+	TxHistory []string          `json:"tx_history"`
 }
 
 // NewAccount initializes a new account with a zero balance.
