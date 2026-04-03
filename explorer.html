@@ -20,6 +20,7 @@
         .section { background-color: #181825; padding: 15px; border-radius: 6px; margin-top: 10px; font-family: monospace; }
         .badge { background-color: #cba6f7; color: #11111b; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; margin-right: 10px; }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
 </head>
 <body>
 
@@ -30,13 +31,29 @@
         <label>Node: </label>
         <select id="nodeUrl">
             <option value="http://localhost:8080">Bootnode (Port 8080)</option>
-            <option value="http://localhost:8081">Node 2 (Port 8081)</option>
+            <option value="http://104.199.234.94:8080">Cloud Node 2 (Port 8080)</option>
         </select>
     </div>
 
     <div class="dashboard">
         <div class="card"><h2>Block Height</h2><div class="value" id="blockHeight">--</div></div>
         <div class="card"><h2>Mempool</h2><div class="value" id="mempoolCount">--</div></div>
+    </div>
+
+    <div class="search-box" style="border: 1px solid #89b4fa;">
+        <h2>💸 Digital Wallet (Broadcast Transaction)</h2>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <input type="text" id="walletPrivKey" placeholder="Your Private Key (Hex)" style="width: 100%;">
+            <input type="text" id="destAddr" placeholder="Recipient Address (Hex)" style="width: 100%;">
+            
+            <div style="display: flex; gap: 10px;">
+                <input type="number" id="sendAmount" placeholder="Amount" style="width: 50%;">
+                <input type="text" id="contractData" placeholder='Optional JSON (e.g., {"method":"SetRecord"...})' style="width: 50%;">
+            </div>
+            
+            <button onclick="sendTransaction()" style="background-color: #89b4fa; width: 100%; margin-top: 10px;">Sign & Send to Mempool</button>
+            <div id="txStatus" style="margin-top: 15px; font-family: monospace; font-size: 0.9rem;"></div>
+        </div>
     </div>
 
     <div class="search-box">
@@ -120,5 +137,100 @@
     setInterval(fetchNetworkStatus, 2000);
     fetchNetworkStatus();
 </script>
+
+<script>
+    const ec = new elliptic.ec('p256');
+
+    // Helper functions to replicate Go's binary byte arrays
+    function hexToBytes(hex) {
+        let bytes = [];
+        for (let c = 0; c < hex.length; c += 2) bytes.push(parseInt(hex.substr(c, 2), 16));
+        return bytes;
+    }
+
+    function intToBigEndianBytes(num, byteCount) {
+        let bytes = new Uint8Array(byteCount);
+        new DataView(bytes.buffer).setBigUint64(0, BigInt(num), false);
+        return Array.from(bytes);
+    }
+
+    function amountToBytes(amountStr) {
+        if (amountStr === "0" || amountStr === "") return [];
+        let hex = BigInt(amountStr).toString(16);
+        if (hex.length % 2 !== 0) hex = '0' + hex;
+        return hexToBytes(hex);
+    }
+
+    async function sendTransaction() {
+        const nodeUrl = document.getElementById('nodeUrl').value;
+        const privKeyHex = document.getElementById('walletPrivKey').value;
+        const toAddr = document.getElementById('destAddr').value;
+        const amount = document.getElementById('sendAmount').value || "0";
+        const dataStr = document.getElementById('contractData').value || "";
+        const statusDiv = document.getElementById('txStatus');
+
+        try {
+            statusDiv.innerText = "Fetching current nonce...";
+            
+            // 1. Derive sender address from private key
+            const key = ec.keyFromPrivate(privKeyHex);
+            const pubKey = key.getPublic();
+            const pubKeyHex = pubKey.getX().toString(16, 64);
+            const senderAddr = pubKeyHex.slice(-40); // Last 20 bytes
+            
+            // 2. Fetch Nonce from the selected node
+            const accRes = await fetch(`${nodeUrl}/account?address=${senderAddr}`);
+            let nonce = 0;
+            if (accRes.ok) {
+                const accData = await accRes.json();
+                nonce = accData.nonce || 0;
+            }
+
+            // 3. Build the Payload exactly like Go does
+            let payloadBytes = [];
+            payloadBytes.push(...hexToBytes(senderAddr));
+            payloadBytes.push(...hexToBytes(toAddr));
+            payloadBytes.push(...amountToBytes(amount));
+            payloadBytes.push(...intToBigEndianBytes(nonce, 8));
+            if (dataStr.length > 0) {
+                payloadBytes.push(...new TextEncoder().encode(dataStr));
+            }
+
+            // 4. Sign the payload using P-256
+            const msgHash = await crypto.subtle.digest('SHA-256', new Uint8Array(payloadBytes));
+            const signature = key.sign(Array.from(new Uint8Array(msgHash)));
+            const sigBytes = Array.from(signature.toDER());
+
+            // 5. Construct the JSON Request
+            // Note: Go's []byte expects Base64 encoded strings in JSON
+            const tx = {
+                sender: hexToBytes(senderAddr),    // <--- CHANGED: Convert Hex string to Byte Array
+                recipient: hexToBytes(toAddr),
+                amount: parseInt(amount),
+                nonce: nonce,
+                data: btoa(dataStr), // Base64 encode the contract data
+                signature: btoa(String.fromCharCode.apply(null, sigBytes))
+            };
+
+            // 6. Broadcast to the API
+            statusDiv.innerText = "Broadcasting to mempool...";
+            const response = await fetch(`${nodeUrl}/tx`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(tx)
+            });
+
+            if (response.ok) {
+                statusDiv.innerHTML = `<span style="color: #a6e3a1;">✅ Success! Transaction accepted into mempool with Nonce ${nonce}</span>`;
+            } else {
+                const err = await response.text();
+                statusDiv.innerHTML = `<span style="color: #f38ba8;">❌ Error: ${err}</span>`;
+            }
+        } catch (e) {
+            statusDiv.innerHTML = `<span style="color: #f38ba8;">❌ Failed: ${e.message}</span>`;
+        }
+    }
+</script>
+
 </body>
 </html>

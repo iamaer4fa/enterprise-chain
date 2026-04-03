@@ -4,6 +4,8 @@ A lightweight, enterprise-grade Layer 1 blockchain built entirely from scratch i
 
 Enterprise Chain is a custom-built, programmable state machine designed to demonstrate the core mechanics of distributed systems, cryptography, and consensus. It operates as a fully decentralized Peer-to-Peer (P2P) network, utilizing a Proof-of-Authority (PoA) consensus mechanism optimized for private or consortium enterprise environments.
 
+# This is experimental software, use at your own risk. #
+
 **Author:** Allan Registos  
 **Module:** `github.com/iamaer4a/enterprise-chain`
 

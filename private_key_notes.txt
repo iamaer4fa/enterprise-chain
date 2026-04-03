@@ -1,6 +1,6 @@
 Replace private keys here before using.
 private key
-This is an testing private key to generate and test errors:
+This is a testing private key to generate and test errors:
 2e157c8e6e662952d9bd0b806a6dd214059eed705605f0473ff16db46cad7f55
 
 Genesis key:

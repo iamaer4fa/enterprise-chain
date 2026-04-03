@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -118,6 +119,15 @@ func (s *Server) handleSubmitTx(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid transaction payload", http.StatusBadRequest)
 		return
 	}
+
+	// --- THE FIX: Node calculates the hash securely ---
+	if len(tx.Hash) == 0 {
+		// Hash the combined Payload and Signature
+		hashData := append(tx.Payload(), tx.Signature...)
+		hashBytes := sha256.Sum256(hashData)
+		tx.Hash = hashBytes[:]
+	}
+	// --------------------------------------------------
 
 	if err := s.pool.Add(tx); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
