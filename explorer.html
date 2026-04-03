@@ -54,6 +54,24 @@
             <button onclick="sendTransaction()" style="background-color: #89b4fa; width: 100%; margin-top: 10px;">Sign & Send to Mempool</button>
             <div id="txStatus" style="margin-top: 15px; font-family: monospace; font-size: 0.9rem;"></div>
         </div>
+        
+        <div class="search-box" style="border: 1px solid #cba6f7; margin-top: 20px;">
+            <h2>📝 Smart Contract (CMMS / Registry)</h2>
+            <p style="color: #a6adc8; font-size: 0.9rem; margin-top: 0;">Execute the SetRecord chaincode to permanently store data.</p>
+        
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <input type="text" id="contractPrivKey" placeholder="Your Private Key (Hex)" style="width: 100%;">
+                <input type="text" id="contractAddr" placeholder="Contract Address (e.g., 9999999999999999999999999999999999999999)" value="9999999999999999999999999999999999999999" style="width: 100%;">
+                
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="recordKey" placeholder="Record Key (e.g., asset:pump_01_status)" style="width: 50%;">
+                    <input type="text" id="recordValue" placeholder="Record Value (e.g., Repaired on April 3)" style="width: 50%;">
+                </div>
+                
+                <button onclick="executeContract()" style="background-color: #cba6f7; width: 100%; margin-top: 10px;">Deploy to Blockchain</button>
+                <div id="contractStatus" style="margin-top: 15px; font-family: monospace; font-size: 0.9rem;"></div>
+            </div>
+        </div>
     </div>
 
     <div class="search-box">
@@ -136,6 +154,8 @@
 
     setInterval(fetchNetworkStatus, 2000);
     fetchNetworkStatus();
+
+    
 </script>
 
 <script>
@@ -222,6 +242,86 @@
 
             if (response.ok) {
                 statusDiv.innerHTML = `<span style="color: #a6e3a1;">✅ Success! Transaction accepted into mempool with Nonce ${nonce}</span>`;
+            } else {
+                const err = await response.text();
+                statusDiv.innerHTML = `<span style="color: #f38ba8;">❌ Error: ${err}</span>`;
+            }
+        } catch (e) {
+            statusDiv.innerHTML = `<span style="color: #f38ba8;">❌ Failed: ${e.message}</span>`;
+        }
+    }
+    async function executeContract() {
+        const nodeUrl = document.getElementById('nodeUrl').value;
+        const privKeyHex = document.getElementById('contractPrivKey').value;
+        const contractAddr = document.getElementById('contractAddr').value;
+        const keyInput = document.getElementById('recordKey').value;
+        const valueInput = document.getElementById('recordValue').value;
+        const statusDiv = document.getElementById('contractStatus');
+
+        if (!privKeyHex || !keyInput || !valueInput) {
+            statusDiv.innerHTML = `<span style="color: #f38ba8;">❌ Error: Please fill in all fields.</span>`;
+            return;
+        }
+
+        try {
+            statusDiv.innerText = "Formatting Chaincode & Fetching nonce...";
+            
+            // 1. Derive sender address
+            const key = ec.keyFromPrivate(privKeyHex);
+            const pubKeyHex = key.getPublic().getX().toString(16, 64);
+            const senderAddr = pubKeyHex.slice(-40); 
+            
+            // 2. Fetch Nonce
+            const accRes = await fetch(`${nodeUrl}/account?address=${senderAddr}`);
+            let nonce = 0;
+            if (accRes.ok) {
+                const accData = await accRes.json();
+                nonce = accData.nonce || 0;
+            }
+
+            // 3. Construct the Smart Contract JSON Payload
+            const contractPayload = JSON.stringify({
+                method: "SetRecord",
+                key: keyInput,
+                value: valueInput
+            });
+
+            // 4. Build the Payload exactly like Go does
+            let payloadBytes = [];
+            payloadBytes.push(...hexToBytes(senderAddr));
+            payloadBytes.push(...hexToBytes(contractAddr));
+            // Amount is 0 for contract calls, so we push an empty array just like amountToBytes("0")
+            payloadBytes.push(...intToBigEndianBytes(nonce, 8));
+            payloadBytes.push(...new TextEncoder().encode(contractPayload));
+
+            // 5. Sign the payload using P-256
+            const msgHash = await crypto.subtle.digest('SHA-256', new Uint8Array(payloadBytes));
+            const signature = key.sign(Array.from(new Uint8Array(msgHash)));
+            const sigBytes = Array.from(signature.toDER());
+
+            // 6. Construct the JSON Request
+            const tx = {
+                sender: hexToBytes(senderAddr),
+                recipient: hexToBytes(contractAddr),
+                amount: 0,
+                nonce: nonce,
+                data: btoa(contractPayload), // Base64 encode the contract JSON
+                signature: btoa(String.fromCharCode.apply(null, sigBytes))
+            };
+
+            // 7. Broadcast to the API
+            statusDiv.innerText = "Broadcasting to mempool...";
+            const response = await fetch(`${nodeUrl}/tx`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(tx)
+            });
+
+            if (response.ok) {
+                statusDiv.innerHTML = `<span style="color: #a6e3a1;">✅ Success! Data written to blockchain.</span>`;
+                // Clear the inputs for the next entry
+                document.getElementById('recordKey').value = '';
+                document.getElementById('recordValue').value = '';
             } else {
                 const err = await response.text();
                 statusDiv.innerHTML = `<span style="color: #f38ba8;">❌ Error: ${err}</span>`;

@@ -129,6 +129,25 @@ func (s *Server) handleSubmitTx(w http.ResponseWriter, r *http.Request) {
 	}
 	// --------------------------------------------------
 
+	// --- NEW: MEMPOOL PRE-FLIGHT VALIDATION ---
+	// 1. Fetch the sender's current state from the database
+	senderAcc, err := s.bc.StateDB().GetAccount(tx.Sender)
+
+	// 2. Check if they exist
+	if err != nil || senderAcc.Balance == nil {
+		http.Error(w, "Transaction rejected: Sender account has no balance.", http.StatusBadRequest)
+		return
+	}
+
+	// 3. Verify they have enough money (Balance < Amount)
+	// We use .Cmp() because these are big.Int, not standard integers
+	if senderAcc.Balance.Cmp(tx.Amount) < 0 {
+		errMsg := fmt.Sprintf("Transaction rejected: Insufficient funds. Have %s, Need %s", senderAcc.Balance.String(), tx.Amount.String())
+		http.Error(w, errMsg, http.StatusBadRequest)
+		return
+	}
+	// ------------------------------------------
+
 	if err := s.pool.Add(tx); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

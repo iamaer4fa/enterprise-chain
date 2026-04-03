@@ -1,6 +1,7 @@
 # Blockchain / database storage
 chaindata/
 chaindata2/
+enterprise-node
 
 # General DB files (optional but recommended)
 *.vlog
