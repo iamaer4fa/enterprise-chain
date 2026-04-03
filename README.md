@@ -42,3 +42,9 @@ The node exposes a local HTTP API to interact with the decentralized ledger. The
 ```bash
 go mod tidy
 go build -o enterprise-node
+
+### update from  github
+git pull origin main
+docker build -t enterprise-chain:latest
+docker rm -f cloud-bootnode
+docker run -d --name cloud-bootnode -p 3000:3000 -p 8080:8080 enterprise-chain:latest --node --p2p :3000 --api :8080
