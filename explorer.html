@@ -34,6 +34,10 @@
             <option value="http://104.199.234.94:8080">Cloud Node 2 (Port 8080)</option>
         </select>
     </div>
+    <div>
+        <label>Corporate API Key: </label>
+<input type="password" id="apiKey" placeholder="Enter secret key..."
+style="padding: 10px; background: #1e1e2e; color: white; border: 1px solid #45475a; margin-bottom: 20px;">
 
     <div class="dashboard">
         <div class="card"><h2>Block Height</h2><div class="value" id="blockHeight">--</div></div>
@@ -206,6 +210,8 @@
                 nonce = accData.nonce || 0;
             }
 
+           
+
             // 3. Build the Payload exactly like Go does
             let payloadBytes = [];
             payloadBytes.push(...hexToBytes(senderAddr));
@@ -232,13 +238,22 @@
                 signature: btoa(String.fromCharCode.apply(null, sigBytes))
             };
 
+            
+
             // 6. Broadcast to the API
             statusDiv.innerText = "Broadcasting to mempool...";
+            // --- NEW: Grab the API Key from the UI ---
+            const apiKey = document.getElementById('apiKey').value;
+
             const response = await fetch(`${nodeUrl}/tx`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-KEY': apiKey 
+                },
                 body: JSON.stringify(tx)
             });
+
 
             if (response.ok) {
                 statusDiv.innerHTML = `<span style="color: #a6e3a1;">✅ Success! Transaction accepted into mempool with Nonce ${nonce}</span>`;
@@ -311,9 +326,14 @@
 
             // 7. Broadcast to the API
             statusDiv.innerText = "Broadcasting to mempool...";
+            // --- NEW: Grab the API Key from the UI ---
+            const apiKey = document.getElementById('apiKey').value;
             const response = await fetch(`${nodeUrl}/tx`, {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-API-KEY': apiKey 
+                },
                 body: JSON.stringify(tx)
             });
 

@@ -114,6 +114,16 @@ func (s *Server) handleSubmitTx(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- NEW: CORPORATE API KEY AUTHORIZATION ---
+	// In production, you would load this from an Environment Variable (.env)
+	// For now, we will hardcode the corporate secret.
+	clientKey := r.Header.Get("X-API-KEY")
+	if clientKey != "STENIEL_SECURE_ERP_2026" {
+		http.Error(w, "Unauthorized: Invalid Corporate API Key", http.StatusUnauthorized)
+		return
+	}
+	// --------------------------------------------
+
 	var tx types.Transaction
 	if err := json.NewDecoder(r.Body).Decode(&tx); err != nil {
 		http.Error(w, "Invalid transaction payload", http.StatusBadRequest)
